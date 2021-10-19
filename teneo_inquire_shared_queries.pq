@@ -30,7 +30,7 @@ SubmitQuery = (url as text, lds as text, id as text, authToken as text) as table
         path = Text.Combine({"/tql/", lds}),
         source = Web.Contents(url, [
             RelativePath = Text.Combine({path, "/shared-queries/submit"}),
-            Query = [identifier = id, timeout = "120"],
+            Query = [identifier = id, timeout = "108000"],
             Content = Json.FromValue(""),
             Headers = [Authorization = Text.Combine({authType, authToken}), #"Content-Type" = "application/x-www-form-urlencoded"],
             IsRetry = true

@@ -25,23 +25,26 @@ Table.ToNavigationTable = (
     in
         navigationTable;
 
-SubmitQuery = (url as text, lds as text, id as text, authToken as text) as record =>
+SubmitQuery = (url as text, lds as text, id as text, authToken as text) as table =>
     let
         path = Text.Combine({"/tql/", lds}),
         source = Web.Contents(url, [
             RelativePath = Text.Combine({path, "/shared-queries/submit"}),
-            Query = [identifier = id, timeout = "1200000"],
+            Query = [identifier = id, timeout = "120"],
             Content = Json.FromValue(""),
             Headers = [Authorization = Text.Combine({authType, authToken}), #"Content-Type" = "application/x-www-form-urlencoded"],
-            IsRetry = true,
-            Timeout = #duration(1, 0, 0, 0)
-        ])
+            IsRetry = true
+        ]),
+        json = Json.Document(source),
+        result = if json[executionConfiguration][timeEstimate] = "immediate" then json else Poll(url, authToken, json[id]),
+        results = Table.FromRecords(result[result]),
+        data = getData(results)
     in
-        Json.Document(source);
+        data;
 
 GetIds = (ar as list) as table =>
     let
-        ids = Table.FromRecords(ar)
+        ids = Table.FromRecords(ar, null, MissingField.UseNull)
     in
         ids;
 
@@ -50,8 +53,7 @@ SharedQueries = (url as text, lds as text, authToken as text) as list =>
         path = Text.Combine({"/tql/", lds}),
         source = Web.Contents(url, [
             RelativePath = Text.Combine({path, "/shared-queries"}),
-            Headers = [Authorization = Text.Combine({authType, authToken}), #"Content-Type" = "application/x-www-form-urlencoded"],
-            Timeout = #duration(1, 0, 0, 0)
+            Headers = [Authorization = Text.Combine({authType, authToken}), #"Content-Type" = "application/x-www-form-urlencoded"]
         ]),
         json = Json.Document(source)
     in
@@ -71,24 +73,24 @@ Login = (url as text, username as text, password as text) as text =>
     in
         authToken;
 
-Poll = (url as text, authToken as text, queryId as text) as table =>
+Poll = (url as text, authToken as text, queryId as text) as record =>
     let
         source = Web.Contents(url, [
             RelativePath = "/tql/poll",
-            Query = [id = queryId, timeout = "1200000"],
+            Query = [id = queryId, timeout = "120"],
             Headers = [Authorization = Text.Combine({authType, authToken}), #"Content-Type" = "application/x-www-form-urlencoded"],
-            IsRetry = true,
-            Timeout = #duration(1, 0, 0, 0)
+            IsRetry = true
         ]),
         json = Json.Document(source),
         // The valid return types are final, partial, cancelled and failure
-        results = if json[type] = "final" then Table.FromRecords(json[result])
+        results = if json[type] = "final" then json
             else if json[type] = "partial" then @Poll(url, authToken, queryId)
             else if json[type] = "cancelled" then error "query cancelled"
             else if json[type] = "failure" then error json[errorMessage]
             else error Text.Combine({"Unknown result type", json[type]})
     in
         results;
+
 
 GetColumnDataType = (indata as table) as record =>
     let
@@ -126,30 +128,28 @@ SetColumnData = (types as record, indata as table) as table =>
     in
         finalTable;
 
-getData = (url as text, authToken as text, queryId as text) as table =>
+getData = (indata as table) as table =>
     let
-        polledData = Poll(url, authToken, queryId),
-        columnType = GetColumnDataType(polledData),
-        data = SetColumnData(columnType, polledData)
+        columnType = GetColumnDataType(indata),
+        data = SetColumnData(columnType, indata)
     in
         data;
 
-GetResults = (url as text, lds as text) as list =>
+GetResults = (url as text, lds as text) as table =>
     let
         authToken = Login(url, Extension.CurrentCredential()[Username], Extension.CurrentCredential()[Password]),
         queryIds = SharedQueries(url, lds, authToken),
         ids = GetIds(queryIds),
-        submittedIds = Table.FromRecords(List.Generate(()=> [index = 0, y=SubmitQuery(url, lds, ids[id]{0}, authToken)], each [index]< List.Count(ids[id]), each [index=[index] + 1, y=SubmitQuery(url, lds, ids[id]{index}, authToken)], each [y]))[id],
-        results = List.Generate(()=> [index = 0, y={ids[publishedName]{0}, ids[publishedName]{0}, getData(url, authToken, submittedIds{0}), "Table", "Table", true}], each [index]< List.Count(submittedIds), each [index=[index] + 1, y={ids[publishedName]{index}, ids[publishedName]{index}, getData(url, authToken, submittedIds{index}), "Table", "Table", true}], each [y])
-    in
-        results;
-
-[DataSource.Kind="teneo_inquire_shared_queries", Publish="teneo_inquire_shared_queries.Publish"]
-shared teneo_inquire_shared_queries.Contents = (url as text, lds as text) as any =>
-    let 
-        results = GetResults(url, lds),
+        results = List.Generate(()=> [index = 0, y={ids[publishedName]{0}, ids[publishedName]{0}, SubmitQuery(url, lds, ids[id]{0}, authToken), "Table", "Table", true}], each [index]< List.Count(ids[id]), each [index=[index] + 1, y={ids[publishedName]{index}, ids[publishedName]{index}, SubmitQuery(url, lds, ids[id]{index}, authToken), "Table", "Table", true}], each [y]),
         tableResult = #table({"Name", "Key", "Data", "ItemKind", "ItemName", "IsLeaf"}, results),
         tableNav = Table.ToNavigationTable(tableResult, {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf")
+    in
+        tableNav;
+
+[DataSource.Kind="teneo_inquire_shared_queries", Publish="teneo_inquire_shared_queries.Publish"]
+shared teneo_inquire_shared_queries.Contents = (url as text, lds as text) as table =>
+    let 
+        tableNav = GetResults(url, lds)
     in
         tableNav;
 

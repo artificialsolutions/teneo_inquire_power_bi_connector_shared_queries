@@ -1,9 +1,8 @@
-﻿
-Microsoft Visual Studio Solution File, Format Version 12.00
+﻿Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 16
 VisualStudioVersion = 16.0.31321.278
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{4DF76451-A46A-4C0B-BE03-459FAAFA07E6}") = "teneo_inquire_shared_queries", "teneo_inquire_shared_queries.mproj", "{29A250EA-8751-4D71-BE97-903C6A496231}"
+Project("{4DF76451-A46A-4C0B-BE03-459FAAFA07E6}") = "teneo_inquire_shared_queries", "teneo_inquire_shared_queries.mproj", "{C61C5188-4286-42A9-97D9-111914AE85B1}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -11,15 +10,15 @@ Global
 		Release|x86 = Release|x86
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{29A250EA-8751-4D71-BE97-903C6A496231}.Debug|x86.ActiveCfg = Debug|x86
-		{29A250EA-8751-4D71-BE97-903C6A496231}.Debug|x86.Build.0 = Debug|x86
-		{29A250EA-8751-4D71-BE97-903C6A496231}.Release|x86.ActiveCfg = Release|x86
-		{29A250EA-8751-4D71-BE97-903C6A496231}.Release|x86.Build.0 = Release|x86
+		{C61C5188-4286-42A9-97D9-111914AE85B1}.Debug|x86.ActiveCfg = Debug|x86
+		{C61C5188-4286-42A9-97D9-111914AE85B1}.Debug|x86.Build.0 = Debug|x86
+		{C61C5188-4286-42A9-97D9-111914AE85B1}.Release|x86.ActiveCfg = Release|x86
+		{C61C5188-4286-42A9-97D9-111914AE85B1}.Release|x86.Build.0 = Release|x86
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
-		SolutionGuid = {ECC41ACC-B33E-4BB6-9317-078D476E785C}
+		SolutionGuid = {1855531A-B749-4650-B4E9-B2CC8808E44C}
 	EndGlobalSection
 EndGlobal

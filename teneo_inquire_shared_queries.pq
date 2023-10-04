@@ -1,13 +1,13 @@
 ﻿// This file contains your Data Connector logic
-[Version = "7.2.0-SP1"]
+[Version = "7.3.0"]
 section teneo_inquire_shared_queries;
 
 [DataSource.Kind="teneo_inquire_shared_queries", Publish="teneo_inquire_shared_queries.Publish"]
 shared teneo_inquire_shared_queries.Contents = (url as text, lds as text) as table =>
     let
-        results = GetResults(url, lds),
-        tableResult = #table({"Name", "Key", "Data", "ItemKind", "ItemName", "IsLeaf"}, results),
-        tableNav = Table.ToNavigationTable(tableResult, {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf")
+        results = Function.InvokeAfter(()=>GetResults(url, lds), #duration(0,0,0,1)),
+        tableResult = Function.InvokeAfter(()=>#table({"Name", "Key", "Data", "ItemKind", "ItemName", "IsLeaf"}, results), #duration(0,0,0,1)),
+        tableNav = Function.InvokeAfter(()=>Table.ToNavigationTable(tableResult, {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf"), #duration(0,0,0,1))
     in
         tableNav;
 
@@ -34,6 +34,7 @@ teneo_inquire_shared_queries.Icons = [
 ];
 
 authType = "Bearer ";
+
 
 Table.ToNavigationTable = (
     table as table,
@@ -63,21 +64,15 @@ SubmitQuery = (url as text, lds as text, id as text, authToken as text) as recor
         postData = [query = id],
         source = Web.Contents(url, [
             RelativePath = "/tql/submit",
-            Query = [timeout = "1200000", lds = lds],
+            Query = [timeout = "120000", lds = lds],
             Content = Text.ToBinary(Uri.BuildQueryString(postData)),
-            Headers = [
-                Authorization = Text.Combine({authType, authToken}), 
-                #"Accept" = "*/*",
-                #"Content-Type" = "application/x-www-form-urlencoded"
-            ],
+            Headers = [Authorization = Text.Combine({authType, authToken}), #"Accept" = "*/*", #"Content-Type" = "application/x-www-form-urlencoded"],
             IsRetry = true,
             Timeout = #duration(1, 0, 0, 0)
         ]),
-        textSource = Text.FromBinary(source),
-        // Ugly hack to avoid the double "type: start" key in response for 7.2.0-SP1
-        cleaned = Text.Replace(textSource, ",""type"":""start""}", "}")
+        textSource = Text.FromBinary(source)
     in
-        Json.Document(cleaned);
+        Json.Document(textSource);
 
 GetIds = (ar as list) as table =>
     let
@@ -93,7 +88,8 @@ SharedQueries = (url as text, lds as text, authToken as text) as list =>
             Headers = [Authorization = Text.Combine({authType, authToken})],
             Timeout = #duration(1, 0, 0, 0)
         ]),
-        json = Json.Document(source)
+        textSource = Text.FromBinary(source),
+        json = Json.Document(textSource)
     in
         json;
 
@@ -116,12 +112,13 @@ Poll = (url as text, authToken as text, queryId as text) as table =>
     let
         source = Web.Contents(url, [
             RelativePath = "/tql/poll",
-            Query = [id = queryId, timeout = "1200000"],
+            Query = [id = queryId, timeout = "120000"],
             Headers = [Authorization = Text.Combine({authType, authToken})],
             IsRetry = true,
             Timeout = #duration(1, 0, 0, 0)
         ]),
-        json = Json.Document(source),
+        textSource = Text.FromBinary(source),
+        json = Json.Document(textSource),
         // The valid return types are final, partial, cancelled and failure
         results = if json[type] = "final" or json[type] = "FinalResultMessage" then Table.FromRecords(json[result])
             else if json[type] = "partial" or json[type] = "PartialUpdateMessage" then @Poll(url, authToken, queryId)
@@ -134,14 +131,14 @@ Poll = (url as text, authToken as text, queryId as text) as table =>
 GetColumnDataType = (indata as table) as record =>
     let
         names = Table.ColumnNames(indata),
-        textList = List.Select(names, each Text.StartsWith(_, "s.") or Text.StartsWith(_, "s:")),
+        textList = List.Select(names, each Text.StartsWith(_, "s.") or Text.StartsWith(_, "s:") or Text.StartsWith(_, "t.e.") or Text.StartsWith(_, "s.sv:")),
         dateList = List.Select(names, each Text.StartsWith(_, "d.") or Text.StartsWith(_, "d:")),
-        dateTimeList = List.Select(names, each Text.StartsWith(_, "dt.") or Text.StartsWith(_, "dt:")),
-        timeList = List.Select(names, each Text.StartsWith(_, "t.") or Text.StartsWith(_, "t:")),
+        dateTimeList = List.Select(names, each Text.StartsWith(_, "dt.") or Text.StartsWith(_, "dt:") or Text.StartsWith(_, "date")),
+        timeList = List.Select(names, each Text.StartsWith(_, "t:")),
         logicalList = List.Select(names, each Text.StartsWith(_, "l.") or Text.StartsWith(_, "l:")),
         binaryList = List.Select(names, each Text.StartsWith(_, "b.") or Text.StartsWith(_, "b:")),
         floatList = List.Select(names, each Text.StartsWith(_, "f.") or Text.StartsWith(_, "f:")),
-        integerList = List.Select(names, each Text.StartsWith(_, "n.") or Text.StartsWith(_, "n:"))
+        integerList = List.Select(names, each Text.StartsWith(_, "n.") or Text.StartsWith(_, "n:") or Text.StartsWith(_, "count"))
     in
         [text = textList, date = dateList, datetime = dateTimeList, time = timeList, logical = logicalList, binary = binaryList, float = floatList, integer = integerList];
 
@@ -169,9 +166,9 @@ SetColumnData = (types as record, indata as table) as table =>
 
 GetData = (url as text, authToken as text, queryId as text) as table =>
     let
-        polledData = Poll(url, authToken, queryId),
-        columnType = GetColumnDataType(polledData),
-        data = SetColumnData(columnType, polledData)
+        polledData = Function.InvokeAfter(()=>Poll(url, authToken, queryId), #duration(0,0,0,1)),
+        columnType = Function.InvokeAfter(()=>GetColumnDataType(polledData), #duration(0,0,0,1)),
+        data = Function.InvokeAfter(()=>SetColumnData(columnType, polledData), #duration(0,0,0,1))
     in
         data;
 
@@ -180,7 +177,7 @@ GetResults = (url as text, lds as text) as list =>
         authToken = Login(url, Extension.CurrentCredential()[Username], Extension.CurrentCredential()[Password]),
         sharedQueriesList = SharedQueries(url, lds, authToken),
         queries = Table.FromRecords(sharedQueriesList),
-        submittedIds = Table.FromRecords(List.Generate(()=> [index = 0, y=SubmitQuery(url, lds, queries[query]{0}, authToken)], each [index]< List.Count(queries[id]), each [index=[index] + 1, y=SubmitQuery(url, lds, queries[id]{index}, authToken)], each [y]))[id],
+        submittedIds = Table.FromRecords(List.Generate(()=> [i = 0, index = 0, y=SubmitQuery(url, lds, queries[query]{i}, authToken)], each [index]< List.Count(queries[id]), each [index=[index] + 1, i = [i] + 1, y=SubmitQuery(url, lds, queries[query]{i}, authToken)], each [y]))[id],
         results = List.Generate(
             ()=> [index = 0, y={queries[publishedName]{0}, queries[publishedName]{0}, GetData(url, authToken, submittedIds{0}), "Table", "Table", true}], 
             each [index]< List.Count(submittedIds), 

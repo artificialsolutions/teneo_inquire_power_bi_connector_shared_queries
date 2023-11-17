@@ -1,13 +1,13 @@
-﻿// This file contains your Data Connector logic
-[Version = "7.3.0"]
+// This file contains your Data Connector logic
+[Version = "7.3.0-2"]
 section teneo_inquire_shared_queries;
 
 [DataSource.Kind="teneo_inquire_shared_queries", Publish="teneo_inquire_shared_queries.Publish"]
 shared teneo_inquire_shared_queries.Contents = (url as text, lds as text) as table =>
     let
-        results = Function.InvokeAfter(()=>GetResults(url, lds), #duration(0,0,0,1)),
-        tableResult = Function.InvokeAfter(()=>#table({"Name", "Key", "Data", "ItemKind", "ItemName", "IsLeaf"}, results), #duration(0,0,0,1)),
-        tableNav = Function.InvokeAfter(()=>Table.ToNavigationTable(tableResult, {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf"), #duration(0,0,0,1))
+        results = Function.InvokeAfter(()=>GetResults(url, lds), #duration(0,0,0,2)),
+        tableResult = Function.InvokeAfter(()=>#table({"Name", "Key", "Data", "ItemKind", "ItemName", "IsLeaf"}, results), #duration(0,0,0,2)),
+        tableNav = Function.InvokeAfter(()=>Table.ToNavigationTable(tableResult, {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf"), #duration(0,0,0,2))
     in
         tableNav;
 
@@ -64,7 +64,7 @@ SubmitQuery = (url as text, lds as text, id as text, authToken as text) as recor
         postData = [query = id],
         source = Web.Contents(url, [
             RelativePath = "/tql/submit",
-            Query = [timeout = "120000", lds = lds],
+            Query = [timeout = "120", lds = lds],
             Content = Text.ToBinary(Uri.BuildQueryString(postData)),
             Headers = [Authorization = Text.Combine({authType, authToken}), #"Accept" = "*/*", #"Content-Type" = "application/x-www-form-urlencoded"],
             IsRetry = true,
@@ -128,6 +128,7 @@ Poll = (url as text, authToken as text, queryId as text) as table =>
     in
         results;
 
+
 GetColumnDataType = (indata as table) as record =>
     let
         names = Table.ColumnNames(indata),
@@ -142,6 +143,7 @@ GetColumnDataType = (indata as table) as record =>
     in
         [text = textList, date = dateList, datetime = dateTimeList, time = timeList, logical = logicalList, binary = binaryList, float = floatList, integer = integerList];
 
+
 SetColumnNames = (indata as table) as table =>
     let
         columnNames = Table.ColumnNames(indata),
@@ -149,6 +151,7 @@ SetColumnNames = (indata as table) as table =>
         outdata = Table.RenameColumns(indata, newColumnNames)
     in
         outdata;
+
 
 SetColumnData = (types as record, indata as table) as table =>
     let
@@ -164,11 +167,12 @@ SetColumnData = (types as record, indata as table) as table =>
     in
         finalTable;
 
+
 GetData = (url as text, authToken as text, queryId as text) as table =>
     let
-        polledData = Function.InvokeAfter(()=>Poll(url, authToken, queryId), #duration(0,0,0,1)),
-        columnType = Function.InvokeAfter(()=>GetColumnDataType(polledData), #duration(0,0,0,1)),
-        data = Function.InvokeAfter(()=>SetColumnData(columnType, polledData), #duration(0,0,0,1))
+        polledData = Function.InvokeAfter(()=>Poll(url, authToken, queryId), #duration(0,0,0,2)),
+        columnType = Function.InvokeAfter(()=>GetColumnDataType(polledData), #duration(0,0,0,2)),
+        data = Function.InvokeAfter(()=>SetColumnData(columnType, polledData), #duration(0,0,0,2))
     in
         data;
 
@@ -179,9 +183,9 @@ GetResults = (url as text, lds as text) as list =>
         queries = Table.FromRecords(sharedQueriesList),
         submittedIds = Table.FromRecords(List.Generate(()=> [i = 0, index = 0, y=SubmitQuery(url, lds, queries[query]{i}, authToken)], each [index]< List.Count(queries[id]), each [index=[index] + 1, i = [i] + 1, y=SubmitQuery(url, lds, queries[query]{i}, authToken)], each [y]))[id],
         results = List.Generate(
-            ()=> [index = 0, y={queries[publishedName]{0}, queries[publishedName]{0}, GetData(url, authToken, submittedIds{0}), "Table", "Table", true}], 
-            each [index]< List.Count(submittedIds), 
-            each [index=[index] + 1, y={queries[publishedName]{index}, queries[publishedName]{index}, GetData(url, authToken, submittedIds{index}), "Table", "Table", true}], 
+            ()=> [index = 0, y={queries[publishedName]{0}, queries[publishedName]{0}, GetData(url, authToken, submittedIds{0}), "Table", "Table", true}],
+            each [index]< List.Count(submittedIds),
+            each [index=[index] + 1, y={queries[publishedName]{index}, queries[publishedName]{index}, GetData(url, authToken, submittedIds{index}), "Table", "Table", true}],
             each [y]
         )
     in
